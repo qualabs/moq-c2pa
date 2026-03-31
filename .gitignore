@@ -2,6 +2,7 @@
 .DS_Store
 *.local
 *.log*
+*.bat
 
 # Ignore local Claude Code config
 *.local.json

@@ -1,7 +1,7 @@
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 
-use crate::{AuthConfig, ClusterConfig, WebConfig};
+use crate::{AuthConfig, ClusterConfig, UpstreamConfig, WebConfig};
 
 /// Top-level relay configuration, loadable from CLI arguments, environment
 /// variables, or a TOML file.
@@ -33,6 +33,11 @@ pub struct Config {
 	#[command(flatten)]
 	#[serde(default)]
 	pub auth: AuthConfig,
+
+	/// Pull broadcasts from an upstream relay and serve them locally.
+	#[command(flatten)]
+	#[serde(default)]
+	pub upstream: UpstreamConfig,
 
 	/// Optionally run a TCP HTTP/WebSocket server.
 	#[command(flatten)]

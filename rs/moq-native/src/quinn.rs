@@ -114,6 +114,10 @@ impl QuinnClient {
 		for alpn in self.versions.alpns() {
 			request = request.with_protocol(alpn.to_string());
 		}
+		request = request.with_header(
+			web_transport_quinn::http::header::HeaderName::from_static("sec-webtransport-http3-draft02"),
+			web_transport_quinn::http::header::HeaderValue::from_static("1"),
+		);
 
 		let session = match url.scheme() {
 			"https" => web_transport_quinn::Session::connect(connection, request).await?,

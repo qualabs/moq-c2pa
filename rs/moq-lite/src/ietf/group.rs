@@ -79,6 +79,9 @@ impl GroupFlags {
 	pub const START_NO_PRIORITY: u64 = 0x30;
 	pub const END_NO_PRIORITY: u64 = 0x3d;
 
+	pub const START_COMPAT: u64 = 0x00;
+	pub const END_COMPAT: u64 = 0x0f;
+
 	pub fn encode(&self) -> Result<u64, EncodeError> {
 		if self.has_subgroup && self.has_subgroup_object {
 			return Err(EncodeError::InvalidState);
@@ -110,6 +113,9 @@ impl GroupFlags {
 			(true, id)
 		} else if (Self::START_NO_PRIORITY..=Self::END_NO_PRIORITY).contains(&id) {
 			(false, id - (Self::START_NO_PRIORITY - Self::START))
+		} else if (Self::START_COMPAT..=Self::END_COMPAT).contains(&id) {
+			// Raw flag bits without 0x10 base — normalize into the 0x10 range
+			(true, id + Self::START)
 		} else {
 			return Err(DecodeError::InvalidValue);
 		};

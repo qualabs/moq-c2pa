@@ -146,6 +146,9 @@ impl ServeCerts {
 		params.not_before = ::time::OffsetDateTime::now_utc() - ::time::Duration::days(1);
 		params.not_after = params.not_before + ::time::Duration::days(14);
 
+		// Chrome requires id-kp-serverAuth EKU for WebTransport serverCertificateHashes.
+		params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
+
 		// Generate the certificate
 		let cert = params.self_signed(&key_pair)?;
 

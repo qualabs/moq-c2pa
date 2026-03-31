@@ -29,7 +29,8 @@ async fn main() -> anyhow::Result<()> {
 
 	let auth = config.auth.init().await?;
 
-	let cluster = Cluster::new(config.cluster, client);
+	let cluster = Cluster::new(config.cluster, client.clone());
+	let upstream = Upstream::new(config.upstream, client, cluster.secondary.clone());
 
 	// Create a web server too.
 	let web = Web::new(
@@ -50,6 +51,7 @@ async fn main() -> anyhow::Result<()> {
 
 	tokio::select! {
 		Err(err) = cluster.clone().run() => return Err(err).context("cluster failed"),
+		Err(err) = upstream.run() => return Err(err).context("upstream failed"),
 		Err(err) = web.run() => return Err(err).context("web server failed"),
 		Err(err) = serve(server, cluster, auth) => return Err(err).context("server failed"),
 		else => Ok(()),

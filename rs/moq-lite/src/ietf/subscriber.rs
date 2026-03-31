@@ -673,8 +673,19 @@ impl<S: web_transport_trait::Session> Subscriber<S> {
 			let request_id = match state.aliases.get(&group.track_alias) {
 				Some(request_id) => *request_id,
 				None => {
-					tracing::warn!(track_alias = %group.track_alias, "unknown track alias, using request ID");
-					RequestId(group.track_alias)
+					// Alias not yet registered — possible race where the group stream
+					// arrived before SubscribeOk was processed. Try request-ID fallback
+					// first, then look for the one subscribe that has no alias yet.
+					let by_id = RequestId(group.track_alias);
+					if state.subscribes.contains_key(&by_id) {
+						by_id
+					} else if let Some((&id, _)) = state.subscribes.iter().find(|(_, ts)| ts.alias.is_none()) {
+						tracing::debug!(track_alias = %group.track_alias, request_id = %id, "unknown track alias, matched unaliased subscribe");
+						id
+					} else {
+						tracing::debug!(track_alias = %group.track_alias, "unknown track alias, using request ID");
+						by_id
+					}
 				}
 			};
 			let track = state.subscribes.get_mut(&request_id).ok_or(Error::NotFound)?;

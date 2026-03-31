@@ -204,11 +204,14 @@ async fn run_uni_group<S: web_transport_trait::Session>(
 	let kind: u64 = stream.decode_peek().await?;
 
 	match kind {
-		GroupFlags::START..=GroupFlags::END | GroupFlags::START_NO_PRIORITY..=GroupFlags::END_NO_PRIORITY => {
-			subscriber.recv_group(stream).await
-		}
 		FetchHeader::TYPE => Err(Error::Unsupported),
-		_ => Err(Error::UnexpectedStream),
+		GroupFlags::START..=GroupFlags::END
+		| GroupFlags::START_NO_PRIORITY..=GroupFlags::END_NO_PRIORITY
+		| GroupFlags::START_COMPAT..=GroupFlags::END_COMPAT => subscriber.recv_group(stream).await,
+		unknown => {
+			tracing::warn!(type_id = unknown, "unexpected stream type");
+			Err(Error::UnexpectedStream)
+		}
 	}
 }
 
