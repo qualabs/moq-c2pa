@@ -23,9 +23,11 @@ av1 = ["dep:scuffle-av1"]
 # Feature flags for codec support; no gated dependencies yet
 aac = []
 opus = []
+c2pa = ["dep:moq-c2pa"]
 
 [dependencies]
 anyhow = "1"
+moq-c2pa = { workspace = true, optional = true }
 base64 = "0.22"
 buf-list = "1"
 bytes = "1"

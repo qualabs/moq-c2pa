@@ -8,6 +8,8 @@
 //! See `main.rs` for a complete example of how these pieces fit together.
 
 mod auth;
+#[cfg(feature = "c2pa")]
+mod c2pa;
 mod cluster;
 mod config;
 mod connection;
@@ -21,6 +23,8 @@ mod websocket;
 pub const DEFAULT_MAX_STREAMS: u64 = 10_000;
 
 pub use auth::*;
+#[cfg(feature = "c2pa")]
+pub use c2pa::*;
 pub use cluster::*;
 pub use config::*;
 pub use connection::*;

@@ -3,6 +3,7 @@ members = [
     "rs/conducer",
     "rs/hang",
     "rs/libmoq",
+    "rs/moq-c2pa",
     "rs/moq-cli",
     "rs/moq-clock",
     "rs/moq-codec",
@@ -22,6 +23,7 @@ rust-version = "1.85"
 
 [workspace.dependencies]
 conducer = { version = "0.3", path = "rs/conducer" }
+moq-c2pa = { version = "0.1", path = "rs/moq-c2pa" }
 hang = { version = "0.15", path = "rs/hang" }
 moq-lite = { version = "0.15", path = "rs/moq-lite" }
 moq-msf = { version = "0.1", path = "rs/moq-msf" }

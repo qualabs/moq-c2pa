@@ -24,9 +24,11 @@ noq = ["moq-native/noq"]
 quinn = ["moq-native/quinn"]
 quiche = ["moq-native/quiche"]
 websocket = ["moq-native/websocket", "dep:qmux", "axum/ws"]
+c2pa = ["dep:moq-c2pa"]
 
 [dependencies]
 anyhow = { version = "1", features = ["backtrace"] }
+moq-c2pa  = { workspace = true, optional = true }
 axum = { version = "0.8", features = ["tokio"] }
 axum-server = { version = "0.8", features = ["tls-rustls"] }
 bytes = "1"

@@ -13,6 +13,12 @@ pub struct Fmp4Config {
 	///
 	/// This requires a player that can decode the fragments directly.
 	pub passthrough: bool,
+
+	/// Optional C2PA signer. When set (requires `passthrough = true`), each
+	/// fMP4 fragment is signed via `c2patool` before being written
+	/// to the moq-lite group frame.
+	#[cfg(feature = "c2pa")]
+	pub signer: Option<std::sync::Arc<moq_c2pa::SegmentSigner>>,
 }
 
 /// Converts fMP4/CMAF files into hang broadcast streams.
@@ -622,14 +628,43 @@ impl Fmp4 {
 
 				let moof_raw = self.moof_raw.as_ref().context("missing moof box")?;
 
-				// To avoid an extra allocation, we use the chunked API to write the moof and mdat atoms separately.
-				let mut frame = g.create_frame(moq_lite::Frame {
-					size: moof_raw.len() as u64 + mdat_raw.len() as u64,
-				})?;
+				// When C2PA signing is enabled, assemble moof+mdat into a single buffer and
+				// pipe it through c2patool. Otherwise use the chunked write API to avoid the
+				// extra allocation.
+				#[cfg(feature = "c2pa")]
+				let signed: Option<bytes::Bytes> = if let Some(signer) = &self.config.signer {
+					let mut segment = Vec::with_capacity(moof_raw.len() + mdat_raw.len());
+					segment.extend_from_slice(moof_raw);
+					segment.extend_from_slice(mdat_raw);
+					Some(signer.sign(&segment).map_err(|e| anyhow::anyhow!("c2pa signing failed: {e}"))?)
+				} else {
+					None
+				};
 
-				frame.write(moof_raw.clone())?;
-				frame.write(Bytes::copy_from_slice(mdat_raw))?;
-				frame.finish()?;
+				#[cfg(feature = "c2pa")]
+				if let Some(signed) = signed {
+					let mut frame = g.create_frame(moq_lite::Frame { size: signed.len() as u64 })?;
+					frame.write(signed)?;
+					frame.finish()?;
+				} else {
+					let mut frame = g.create_frame(moq_lite::Frame {
+						size: moof_raw.len() as u64 + mdat_raw.len() as u64,
+					})?;
+					frame.write(moof_raw.clone())?;
+					frame.write(Bytes::copy_from_slice(mdat_raw))?;
+					frame.finish()?;
+				}
+
+				#[cfg(not(feature = "c2pa"))]
+				{
+					// To avoid an extra allocation, we use the chunked API to write the moof and mdat atoms separately.
+					let mut frame = g.create_frame(moq_lite::Frame {
+						size: moof_raw.len() as u64 + mdat_raw.len() as u64,
+					})?;
+					frame.write(moof_raw.clone())?;
+					frame.write(Bytes::copy_from_slice(mdat_raw))?;
+					frame.finish()?;
+				}
 
 				*group = Some(g);
 			}

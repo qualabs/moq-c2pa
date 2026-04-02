@@ -30,7 +30,19 @@ async fn main() -> anyhow::Result<()> {
 	let auth = config.auth.init().await?;
 
 	let cluster = Cluster::new(config.cluster, client.clone());
-	let upstream = Upstream::new(config.upstream, client, cluster.secondary.clone());
+
+	// When C2PA signing is configured, route upstream broadcasts through a signing
+	// proxy before they reach secondary. Otherwise bypass it entirely.
+	#[cfg(feature = "c2pa")]
+	let (upstream_dest, c2pa_proxy) = {
+		let ateme_raw = moq_lite::Origin::produce();
+		let proxy = C2paProxy::new(&config.c2pa, ateme_raw.consume(), cluster.secondary.clone());
+		(ateme_raw, proxy)
+	};
+	#[cfg(not(feature = "c2pa"))]
+	let upstream_dest = cluster.secondary.clone();
+
+	let upstream = Upstream::new(config.upstream, client, upstream_dest);
 
 	// Create a web server too.
 	let web = Web::new(
@@ -48,6 +60,15 @@ async fn main() -> anyhow::Result<()> {
 	#[cfg(unix)]
 	// Notify systemd that we're ready after all initialization is complete
 	let _ = sd_notify::notify(true, &[sd_notify::NotifyState::Ready]);
+
+	#[cfg(feature = "c2pa")]
+	if let Some(proxy) = c2pa_proxy {
+		tokio::spawn(async move {
+			if let Err(e) = proxy.run().await {
+				tracing::error!(%e, "c2pa proxy failed");
+			}
+		});
+	}
 
 	tokio::select! {
 		Err(err) = cluster.clone().run() => return Err(err).context("cluster failed"),

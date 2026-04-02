@@ -3,6 +3,22 @@ use serde::{Deserialize, Serialize};
 
 use crate::{AuthConfig, ClusterConfig, UpstreamConfig, WebConfig};
 
+/// Configuration for C2PA per-segment signing of upstream video tracks.
+#[derive(clap::Args, Clone, Debug, Deserialize, Serialize, Default)]
+#[serde(default, deny_unknown_fields)]
+#[non_exhaustive]
+pub struct C2paConfig {
+    /// Path to a C2PA manifest JSON file.
+    /// When set, video tracks received from the upstream relay are signed
+    /// via c2patool before being forwarded to subscribers.
+    #[arg(long = "c2pa-manifest", env = "MOQ_C2PA_MANIFEST")]
+    pub manifest_path: Option<std::path::PathBuf>,
+
+    /// Path to the c2patool binary.
+    #[arg(long = "c2patool-path", env = "MOQ_C2PATOOL_PATH", default_value = r"C:\Users\santi\moq-c2pa\rs\moq-c2pa\bin\c2patool.exe")]
+    pub c2patool_path: std::path::PathBuf,
+}
+
 /// Top-level relay configuration, loadable from CLI arguments, environment
 /// variables, or a TOML file.
 #[derive(Parser, Clone, Debug, Deserialize, Serialize, Default)]
@@ -38,6 +54,11 @@ pub struct Config {
 	#[command(flatten)]
 	#[serde(default)]
 	pub upstream: UpstreamConfig,
+
+	/// C2PA signing configuration for upstream video tracks.
+	#[command(flatten)]
+	#[serde(default)]
+	pub c2pa: C2paConfig,
 
 	/// Optionally run a TCP HTTP/WebSocket server.
 	#[command(flatten)]
