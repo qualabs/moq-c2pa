@@ -3266,6 +3266,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "moq-c2pa"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "moq-cli"
 version = "0.7.12"
 dependencies = [
@@ -3274,6 +3282,7 @@ dependencies = [
  "axum-server",
  "clap",
  "hang",
+ "moq-c2pa",
  "moq-mux",
  "moq-native",
  "rustls",
@@ -3358,6 +3367,7 @@ dependencies = [
  "h264-parser",
  "hang",
  "m3u8-rs",
+ "moq-c2pa",
  "moq-lite",
  "moq-msf",
  "mp4-atom",
@@ -3421,6 +3431,7 @@ dependencies = [
  "clap",
  "futures",
  "http-body",
+ "moq-c2pa",
  "moq-lite",
  "moq-native",
  "moq-token",
