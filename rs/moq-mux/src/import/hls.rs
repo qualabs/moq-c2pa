@@ -492,8 +492,6 @@ impl Hls {
 				self.catalog.clone(),
 				Fmp4Config {
 					passthrough: self.passthrough,
-					#[cfg(feature = "c2pa")]
-					signer: None,
 				},
 			);
 			self.video_importers.push(importer);
@@ -506,7 +504,7 @@ impl Hls {
 	fn ensure_audio_importer(&mut self) -> &mut Fmp4 {
 		let passthrough = self.passthrough;
 		self.audio_importer
-			.get_or_insert_with(|| Fmp4::new(self.broadcast.clone(), self.catalog.clone(), Fmp4Config { passthrough, #[cfg(feature = "c2pa")] signer: None }))
+			.get_or_insert_with(|| Fmp4::new(self.broadcast.clone(), self.catalog.clone(), Fmp4Config { passthrough }))
 	}
 
 	#[cfg(test)]
