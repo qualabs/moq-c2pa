@@ -2,40 +2,51 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
+use base64::Engine as _;
 use bytes::Bytes;
+use sha2::{Digest, Sha256};
 
 use crate::Error;
 
-/// Signs a complete CMAF segment (moof+mdat) by piping it through the `c2patool` binary.
+/// Signs a complete CMAF segment (moof+mdat) by piping it through the `c2pa-live-cbc` binary.
 pub struct SegmentSigner {
     /// Path to the C2PA manifest JSON file.
     pub manifest_path: PathBuf,
-    /// Path to the `c2patool` binary. Defaults to `"c2patool"` (searched on PATH).
-    pub c2patool_path: PathBuf,
+    /// Path to the `c2pa-live-cbc` binary.
+    pub signer_path: PathBuf,
+    /// Stream ID used for deterministic IV derivation.
+    pub stream_id: String,
+    /// Base64-encoded first-16-bytes of SHA-256 of the signing cert.
+    /// Required by c2pa-live-cbc as the CERT_HASH_B64 environment variable.
+    cert_hash_b64: String,
 }
 
 impl SegmentSigner {
+    /// Create a new signer, computing `CERT_HASH_B64` from the cert referenced in the manifest.
+    pub fn new(manifest_path: PathBuf, signer_path: PathBuf, stream_id: String) -> Result<Self, Error> {
+        let cert_hash_b64 = compute_cert_hash(&manifest_path)?;
+        Ok(Self { manifest_path, signer_path, stream_id, cert_hash_b64 })
+    }
+
     /// Sign a complete CMAF segment (moof+mdat bytes).
     ///
-    /// Runs: `c2patool - --format video/iso.segment --manifest <path> --output - --no_signing_verify`
-    ///
-    /// The signed output may contain additional ISO BMFF boxes (e.g. a `uuid` box carrying
-    /// the C2PA manifest) appended after the original mdat.
-    pub fn sign(&self, segment: &[u8]) -> Result<Bytes, Error> {
+    /// Runs: `c2pa-live-cbc sign-stream --manifest <path> --segment-index <n> --stream-id <id>`
+    /// with `CERT_HASH_B64` set in the environment.
+    pub fn sign(&self, segment: &[u8], segment_index: usize) -> Result<Bytes, Error> {
         let manifest = self.manifest_path.to_str().ok_or(Error::InvalidPath)?;
-        let tool = self.c2patool_path.to_str().ok_or(Error::InvalidPath)?;
+        let tool = self.signer_path.to_str().ok_or(Error::InvalidPath)?;
 
         let mut child = Command::new(tool)
             .args([
-                "-",
-                "--format",
-                "video/iso.segment",
+                "sign-stream",
                 "--manifest",
                 manifest,
-                "--output",
-                "-",
-                "--no_signing_verify",
+                "--segment-index",
+                &segment_index.to_string(),
+                "--stream-id",
+                &self.stream_id,
             ])
+            .env("CERT_HASH_B64", &self.cert_hash_b64)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -57,6 +68,25 @@ impl SegmentSigner {
 
         Ok(Bytes::from(output.stdout))
     }
+}
+
+/// Parse the manifest JSON, resolve `sign_cert` relative to the manifest's directory,
+/// read the cert, and return `base64(sha256(cert)[0..16])`.
+fn compute_cert_hash(manifest_path: &std::path::Path) -> Result<String, Error> {
+    let manifest_str = std::fs::read_to_string(manifest_path).map_err(Error::Io)?;
+    let manifest: serde_json::Value =
+        serde_json::from_str(&manifest_str).map_err(Error::ManifestParse)?;
+
+    let sign_cert_rel = manifest["sign_cert"]
+        .as_str()
+        .ok_or(Error::ManifestMissingField("sign_cert"))?;
+
+    let manifest_dir = manifest_path.parent().ok_or(Error::InvalidPath)?;
+    let cert_path = manifest_dir.join(sign_cert_rel);
+
+    let cert_bytes = std::fs::read(&cert_path).map_err(Error::Io)?;
+    let hash = Sha256::digest(&cert_bytes);
+    Ok(base64::engine::general_purpose::STANDARD.encode(&hash[..16]))
 }
 
 #[cfg(test)]
@@ -87,12 +117,13 @@ mod tests {
         let segment = generate_cmaf_segment();
         let original_size = segment.len();
 
-        let signer = SegmentSigner {
-            manifest_path: PathBuf::from(r"C:\Users\santi\Downloads\vod_image (1).json"),
-            c2patool_path: PathBuf::from(r"C:\Users\santi\moq-c2pa\rs\moq-c2pa\bin\c2patool.exe"),
-        };
+        let signer = SegmentSigner::new(
+            PathBuf::from(r"C:\Users\santi\moq-c2pa\rs\moq-c2pa\segment_manifest.json"),
+            PathBuf::from(r"C:\Users\santi\moq-c2pa\rs\moq-c2pa\bin\c2pa-live-cbc.exe"),
+            "test-stream".to_string(),
+        ).expect("failed to create signer");
 
-        let signed = signer.sign(&segment).expect("signing failed");
+        let signed = signer.sign(&segment, 0).expect("signing failed");
 
         // Signed output must be larger (C2PA manifest was embedded).
         assert!(

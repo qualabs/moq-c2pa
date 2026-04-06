@@ -36,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
 	#[cfg(feature = "c2pa")]
 	let (upstream_dest, c2pa_proxy) = {
 		let ateme_raw = moq_lite::Origin::produce();
-		let proxy = C2paProxy::new(&config.c2pa, ateme_raw.consume(), cluster.secondary.clone());
+		let proxy = C2paProxy::new(&config.c2pa, ateme_raw.consume(), cluster.secondary.clone())?;
 		(ateme_raw, proxy)
 	};
 	#[cfg(not(feature = "c2pa"))]

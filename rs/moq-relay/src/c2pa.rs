@@ -18,16 +18,17 @@ pub struct C2paProxy {
 
 impl C2paProxy {
 	/// Create a new proxy. Returns `None` if no manifest path is configured.
-	pub fn new(config: &C2paConfig, source: OriginConsumer, dest: OriginProducer) -> Option<Self> {
-		let manifest = config.manifest_path.clone()?;
-		Some(Self {
+	pub fn new(config: &C2paConfig, source: OriginConsumer, dest: OriginProducer) -> anyhow::Result<Option<Self>> {
+		let Some(manifest) = config.manifest_path.clone() else {
+			return Ok(None);
+		};
+		let signer = SegmentSigner::new(manifest, config.signer_path.clone(), config.stream_id.clone())
+			.map_err(|e| anyhow::anyhow!("failed to initialize C2PA signer: {e}"))?;
+		Ok(Some(Self {
 			source,
 			dest,
-			signer: Arc::new(SegmentSigner {
-				manifest_path: manifest,
-				c2patool_path: config.c2patool_path.clone(),
-			}),
-		})
+			signer: Arc::new(signer),
+		}))
 	}
 
 	/// Run the proxy loop. Spawns a signing task for each announced broadcast.
@@ -116,17 +117,21 @@ async fn sign_track_adaptive(
 		return Ok(());
 	};
 
-	// Probe: attempt to sign the full CMAF segment. c2patool handles sidx/styp
-	// prefixes natively. Success means this is a signable video track.
+	// Each frame in this track gets a monotonically increasing segment index
+	// for deterministic IV derivation in CBC-MAC signing.
+	let mut segment_index: usize = 0;
+
+	// Probe: attempt to sign the first frame to determine if this is a signable video track.
 	let signer2 = signer.clone();
 	let probe_frame = first_frame.clone();
-	let probe = tokio::task::spawn_blocking(move || signer2.sign(&probe_frame)).await?;
+	let probe = tokio::task::spawn_blocking(move || signer2.sign(&probe_frame, segment_index)).await?;
 	let do_sign = probe.is_ok();
+	segment_index += 1;
 
 	if do_sign {
 		tracing::info!(track = %producer.info.name, "c2pa: signing CMAF video track");
 	} else {
-		tracing::debug!(track = %producer.info.name, "c2pa: non-video track, passing through unsigned");
+		tracing::warn!(track = %producer.info.name, err = ?probe.as_ref().unwrap_err(), "c2pa: probe failed, passing through unsigned");
 	}
 
 	// Write first frame (signed or original).
@@ -140,7 +145,8 @@ async fn sign_track_adaptive(
 	// Finish first group.
 	while let Some(frame) = first_group_c.read_frame().await? {
 		if do_sign {
-			first_gp.write_frame(sign_frame(frame, &signer).await)?;
+			first_gp.write_frame(sign_frame(frame, &signer, segment_index).await)?;
+			segment_index += 1;
 		} else {
 			first_gp.write_frame(frame)?;
 		}
@@ -152,7 +158,8 @@ async fn sign_track_adaptive(
 		let mut group_p = producer.append_group()?;
 		while let Some(frame) = group_c.read_frame().await? {
 			if do_sign {
-				group_p.write_frame(sign_frame(frame, &signer).await)?;
+				group_p.write_frame(sign_frame(frame, &signer, segment_index).await)?;
+				segment_index += 1;
 			} else {
 				group_p.write_frame(frame)?;
 			}
@@ -165,10 +172,10 @@ async fn sign_track_adaptive(
 }
 // to-do change fram to chunk in repo
 /// Sign a single CMAF frame, returning the signed bytes or the original on error.
-async fn sign_frame(frame: Bytes, signer: &Arc<SegmentSigner>) -> Bytes {
+async fn sign_frame(frame: Bytes, signer: &Arc<SegmentSigner>, segment_index: usize) -> Bytes {
 	let signer2 = signer.clone();
 	let original = frame.clone();
-	match tokio::task::spawn_blocking(move || signer2.sign(&frame)).await {
+	match tokio::task::spawn_blocking(move || signer2.sign(&frame, segment_index)).await {
 		Ok(Ok(signed)) => signed,
 		Ok(Err(e)) => {
 			tracing::warn!(%e, "c2pa: signing failed, passing through original");

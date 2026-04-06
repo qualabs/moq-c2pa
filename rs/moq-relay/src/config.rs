@@ -10,13 +10,17 @@ use crate::{AuthConfig, ClusterConfig, UpstreamConfig, WebConfig};
 pub struct C2paConfig {
     /// Path to a C2PA manifest JSON file.
     /// When set, video tracks received from the upstream relay are signed
-    /// via c2patool before being forwarded to subscribers.
+    /// via c2pa-live-cbc before being forwarded to subscribers.
     #[arg(long = "c2pa-manifest", env = "MOQ_C2PA_MANIFEST")]
     pub manifest_path: Option<std::path::PathBuf>,
 
-    /// Path to the c2patool binary.
-    #[arg(long = "c2patool-path", env = "MOQ_C2PATOOL_PATH", default_value = r"C:\Users\santi\moq-c2pa\rs\moq-c2pa\bin\c2patool.exe")]
-    pub c2patool_path: std::path::PathBuf,
+    /// Path to the c2pa-live-cbc signer binary.
+    #[arg(long = "c2pa-signer-path", env = "MOQ_C2PA_SIGNER_PATH", default_value = r"C:\Users\santi\moq-c2pa\rs\moq-c2pa\bin\c2pa-live-cbc.exe")]
+    pub signer_path: std::path::PathBuf,
+
+    /// Stream ID used for deterministic IV derivation in CBC-MAC signing.
+    #[arg(long = "c2pa-stream-id", env = "MOQ_C2PA_STREAM_ID", default_value = "stream")]
+    pub stream_id: String,
 }
 
 /// Top-level relay configuration, loadable from CLI arguments, environment
